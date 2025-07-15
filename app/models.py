@@ -1,6 +1,5 @@
-# app/models.py
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -12,21 +11,41 @@ class Sprint(Base):
     name = Column(String, index=True)
     state = Column(String)
     board_id = Column(Integer, index=True)
+    issues_synced = Column(DateTime(timezone=True), nullable=True)
 
-    # Timestamp when issues were last fetched from Jira (NULL = never fetched yet)
-    issues_synced = Column(DateTime(timezone=True), nullable=True, index=True)
-
-    issues = relationship("Issue", back_populates="sprint", cascade="all, delete-orphan")
+    # many‑to‑many via association table
+    issues = relationship(
+        "Issue",
+        secondary="sprint_issues",
+        back_populates="sprints",
+        viewonly=True,
+    )
 
 class Issue(Base):
     __tablename__ = "issues"
 
     id = Column(Integer, primary_key=True, index=True)
-    jira_key = Column(String, unique=True, index=True)
+    jira_key = Column(String, unique=True, index=True, nullable=False)
     summary = Column(String)
     description = Column(String)
     is_subtask = Column(Boolean, default=False)
     parent_key = Column(String, index=True, nullable=True)
-    sprint_id = Column(Integer, ForeignKey("sprints.id", ondelete="CASCADE"))
 
-    sprint = relationship("Sprint", back_populates="issues")
+    sprints = relationship(
+        "Sprint",
+        secondary="sprint_issues",
+        back_populates="issues",
+        viewonly=True,
+    )
+
+class SprintIssue(Base):
+    """Association table – one issue may appear in many sprints."""
+
+    __tablename__ = "sprint_issues"
+    sprint_id = Column(Integer, ForeignKey("sprints.id", ondelete="CASCADE"), primary_key=True)
+    issue_id = Column(Integer, ForeignKey("issues.id",  ondelete="CASCADE"), primary_key=True)
+    added_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("sprint_id", "issue_id", name="uq_sprint_issue"),
+    )
