@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: jira
+      POSTGRES_PASSWORD: jira
+      POSTGRES_DB: jira_cache
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jira:jira@db:5432/jira_cache
+      JIRA_BASE_URL: https://your-domain.atlassian.net
+      JIRA_EMAIL: you@example.com
+      JIRA_API_TOKEN: your-token
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+volumes:
+  pgdata:

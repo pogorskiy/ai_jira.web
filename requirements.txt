@@ -1,0 +1,10 @@
+# requirements.txt
+
+fastapi             # High-performance ASGI framework for the API layer
+uvicorn[standard]   # ASGI server with auto-reload for local development
+SQLAlchemy[asyncio] # Async ORM used for database access
+httpx               # Async HTTP client (Jira, OpenAI, etc.)
+python-dotenv       # Load environment variables from .env files
+asyncpg             # High-performance PostgreSQL driver for SQLAlchemy
+pydantic            # Data validation and settings management
+alembic             # (Optional) Database schema migrations
