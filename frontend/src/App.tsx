@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-import type { Sprint } from './types';
+import type { Sprint, Issue, SprintWithIssues } from './types';
 import {
   MantineProvider,
   Container,
@@ -9,6 +9,7 @@ import {
   Table,
   ScrollArea,
   Group,
+  Tooltip,          // ← добавили
 } from '@mantine/core';
 import {
   QueryClient,
@@ -55,15 +56,15 @@ const { data: sprints = [], isFetching: sprintsFetching } = useQuery<Sprint[]>({
 });
 
   /* ------ issues for chosen sprint ------ */
-  const {
-    data: issuesData,
-    isFetching: issuesFetching,
-    refetch: refetchIssues,
-  } = useQuery({
-    queryKey: ['issues', selected],
-    queryFn: () => fetchIssues(Number(selected), false),
-    enabled: false, // run manually via button
-  });
+const {
+  data: issuesData,
+  isFetching: issuesFetching,
+  refetch: refetchIssues,
+} = useQuery<SprintWithIssues>({
+  queryKey: ['issues', selected],
+  queryFn: () => fetchIssues(Number(selected), false),
+  enabled: false,
+});
 
   /* ------------------- handlers ------------------- */
 
@@ -132,13 +133,22 @@ const { data: sprints = [], isFetching: sprintsFetching } = useQuery<Sprint[]>({
               </tr>
             </thead>
             <tbody>
-              {issuesData.issues.map((it: any) => (
-                <tr key={it.jira_key}>
-                  <td>{it.jira_key}</td>
-                  <td>{it.summary}</td>
-                  <td>{it.is_subtask ? '✔' : ''}</td>
-                  <td>{it.parent_key || '—'}</td>
-                </tr>
+              {issuesData?.issues.map((it: Issue) => (
+                <Tooltip
+                  key={it.jira_key}
+                  label={it.description || 'No description'}
+                  multiline
+                  w={400}
+                  withArrow
+                  transitionProps={{ duration: 150 }}
+                >
+                  <tr>
+                    <td>{it.jira_key}</td>
+                    <td>{it.summary}</td>
+                    <td>{it.is_subtask ? '✔' : ''}</td>
+                    <td>{it.parent_key || '—'}</td>
+                  </tr>
+                </Tooltip>
               ))}
             </tbody>
           </Table>
