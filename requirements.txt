@@ -8,3 +8,4 @@ python-dotenv       # Load environment variables from .env files
 asyncpg             # High-performance PostgreSQL driver for SQLAlchemy
 pydantic            # Data validation and settings management
 alembic             # (Optional) Database schema migrations
+openai>=1.4.0
