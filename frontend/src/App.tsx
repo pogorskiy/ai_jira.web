@@ -10,12 +10,17 @@ import {
   ScrollArea,
   Group,
   Tooltip,
+  SimpleGrid,
+  Paper,
+  Textarea,
+  Loader,
 } from '@mantine/core';
 import {
   QueryClient,
   QueryClientProvider,
   useQuery,
   useQueryClient,
+  useMutation,
 } from '@tanstack/react-query';
 
 // initialise react-query
@@ -39,6 +44,11 @@ async function fetchIssues(sprintId: number, force: boolean) {
     `/sprints/${sprintId}/issues${force ? '?refresh=true' : ''}`,
   );
   return data; // { jira_id, name, state, issues: [...] }
+}
+
+async function fetchSummary(sprintId: number) {
+  const { data } = await api.get(`/sprints/${sprintId}/summary`);
+  return data as { sprint_id: number; summary: string };
 }
 
 /* --------------------------- page component ---------------------------- */
@@ -66,7 +76,12 @@ const {
   enabled: false,
 });
 
-  /* ------------------- handlers ------------------- */
+/* ------ summary mutation ------ */
+const summaryMutation = useMutation({
+  mutationFn: () => fetchSummary(Number(selected)),
+});
+
+/* ------------------- handlers ------------------- */
 
   const handleRefreshSprints = async () => {
     await queryClient.fetchQuery({
@@ -119,41 +134,71 @@ const {
         >
           Refresh issues
         </Button>
+
+        <Button
+          disabled={!selected}
+          loading={summaryMutation.isPending}
+          onClick={() => summaryMutation.mutate()}
+        >
+          Сделать&nbsp;саммари
+        </Button>
       </Group>
 
-      {issuesData && (
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        {/* Issues table */}
         <ScrollArea h={500}>
-          <Table striped highlightOnHover withBorder maw={1800} mx="auto">
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th>Summary</th>
-                <th>Sub-task</th>
-                <th>Parent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {issuesData?.issues.map((it: Issue) => (
-                <Tooltip
-                  key={it.jira_key}
-                  label={it.description || 'No description'}
-                  multiline
-                  w={400}
-                  withArrow
-                  transitionProps={{ duration: 150 }}
-                >
-                  <tr>
-                    <td>{it.jira_key}</td>
-                    <td>{it.summary}</td>
-                    <td>{it.is_subtask ? '✔' : ''}</td>
-                    <td>{it.parent_key || '—'}</td>
-                  </tr>
-                </Tooltip>
-              ))}
-            </tbody>
-          </Table>
+          {issuesData ? (
+            <Table striped highlightOnHover withBorder maw={1800} mx="auto">
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Summary</th>
+                  <th>Sub-task</th>
+                  <th>Parent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {issuesData.issues.map((it: Issue) => (
+                  <Tooltip
+                    key={it.jira_key}
+                    label={it.description || 'No description'}
+                    multiline
+                    w={400}
+                    withArrow
+                    transitionProps={{ duration: 150 }}
+                  >
+                    <tr>
+                      <td>{it.jira_key}</td>
+                      <td>{it.summary}</td>
+                      <td>{it.is_subtask ? '✔' : ''}</td>
+                      <td>{it.parent_key || '—'}</td>
+                    </tr>
+                  </Tooltip>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <em>Select a sprint and click "Fetch issues"</em>
+          )}
         </ScrollArea>
-      )}
+
+        {/* Summary panel */}
+        <Paper shadow="sm" p="md" withBorder>
+          {summaryMutation.isPending && <Loader />}
+          {summaryMutation.data && (
+            <Textarea
+              minRows={15}
+              value={summaryMutation.data.summary}
+              readOnly
+              autosize
+              label="Саммари спринта"
+            />
+          )}
+          {!summaryMutation.isPending && !summaryMutation.data && (
+            <em>Click “Сделать саммари” to generate the sprint summary.</em>
+          )}
+        </Paper>
+      </SimpleGrid>
     </Container>
   );
 }

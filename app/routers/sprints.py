@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from .. import schemas, models
 from ..database import get_session
 from ..services.jira import JiraClient
+from ..services.openai import summarize_sprint
 from openai import AsyncOpenAI
 import os
 
@@ -231,42 +232,10 @@ async def get_sprint_summary(
         session=session,
     )
 
-    # Build prompt
-    def issue_line(it):
-        parent = f"(parent: {it.parent_key})" if it.parent_key else ""
-        return f"- {it.jira_key}: {it.summary} {parent}".strip()
-
-    bullet_list = "\n".join(issue_line(i) for i in sprint_data.issues)
-
-    system_msg = (
-        "You are an Agile assistant. "
-        "Descriptions of issues may be in Russian or English. "
-        "Given a sprint backlog, produce two lists in Russian: "
-        "1) main goals, 2) secondary goals."
+    summary_text = await summarize_sprint(
+        name=sprint_data.name,
+        state=sprint_data.state,
+        issues=sprint_data.issues,
     )
-
-    user_msg = (
-        f"Sprint name: {sprint_data.name}\n"
-        f"Sprint state: {sprint_data.state}\n"
-        "Issues:\n"
-        f"{bullet_list}"
-    )
-
-    # Query ChatGPT o3
-    openai_client = AsyncOpenAI(
-        api_key=os.getenv("OPENAI_API_KEY")
-    )
-
-    chat_response = await openai_client.chat.completions.create(
-        model="o3",
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg},
-        ],
-        max_completion_tokens=2000,
-        temperature=1,
-    )
-
-    summary_text = chat_response.choices[0].message.content.strip()
 
     return {"sprint_id": sprint_id, "summary": summary_text}
