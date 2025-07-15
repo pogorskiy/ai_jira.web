@@ -9,7 +9,7 @@ import {
   Table,
   ScrollArea,
   Group,
-  Tooltip,          // ← добавили
+  Tooltip,
 } from '@mantine/core';
 import {
   QueryClient,
