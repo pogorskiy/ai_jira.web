@@ -123,7 +123,7 @@ const {
 
       {issuesData && (
         <ScrollArea h={500}>
-          <Table striped highlightOnHover withBorder maw={900} mx="auto">
+          <Table striped highlightOnHover withBorder maw={1800} mx="auto">
             <thead>
               <tr>
                 <th>Key</th>
