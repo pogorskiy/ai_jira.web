@@ -105,6 +105,14 @@ async def get_sprint_summary(
       {"sprint_id": 123, "summary": "…"}
       ```
     """
+    # Получить спринт из базы
+    res = await session.execute(select(models.Sprint).where(models.Sprint.jira_id == sprint_id))
+    sprint_row = res.scalar_one_or_none()
+
+    # Если summary уже есть и не требуется обновление — вернуть из базы
+    if sprint_row and sprint_row.summary_text and not force_refresh:
+        return {"sprint_id": sprint_id, "summary": sprint_row.summary_text}
+
     # Pull sprint issues (reuse existing logic)
     sprint_data = await get_issues_for_sprint(
         sprint_id=sprint_id,
@@ -117,5 +125,11 @@ async def get_sprint_summary(
         state=sprint_data.state,
         issues=sprint_data.issues,
     )
+
+    # Сохранить summary в базу
+    if sprint_row:
+        sprint_row.summary_text = summary_text
+        sprint_row.summary_updated = datetime.now(timezone.utc)
+        await session.commit()
 
     return {"sprint_id": sprint_id, "summary": summary_text}
