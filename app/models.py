@@ -12,6 +12,8 @@ class Sprint(Base):
     state = Column(String)
     board_id = Column(Integer, index=True)
     issues_synced = Column(DateTime(timezone=True), nullable=True)
+    summary_text = Column(String, nullable=True)
+    summary_updated = Column(DateTime(timezone=True), nullable=True)
 
     # many‑to‑many via association table
     issues = relationship(

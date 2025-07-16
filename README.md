@@ -119,3 +119,47 @@ alembic upgrade head
 	1.	Open http://localhost:5173.
 	2.	Click Refresh sprints, pick a sprint, Fetch issues.
 	3.	Hover any row – a tooltip shows the issue description.
+
+  ## 11
+
+  0. Recreate Database
+  ```
+  docker compose exec db \
+  psql -U jira -d postgres -c "DROP DATABASE IF EXISTS jira_cache;"
+
+  docker compose exec db \
+  psql -U jira -d postgres -c "CREATE DATABASE jira_cache OWNER jira;"
+
+  ```
+
+  1.  Downgrade base
+   ```
+   alembic downgrade base
+   ```
+  
+  2. Remove miogrations
+  ```
+  rm migrations/versions/*.py
+  ```
+
+  1. Reset alembic_version
+  ```
+  docker compose exec db psql -U jira -d jira_cache -c "DELETE FROM alembic_version;"  
+  ```
+
+  1. Reset version
+  ```
+  alembic stamp base
+  ```
+
+  1. Generate new revision
+  ```
+  alembic revision --autogenerate -m "initial schema"
+  ```
+  1. Apply migrations
+  
+  ```
+  alembic upgrade head
+  ```
+
+
