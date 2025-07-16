@@ -7,8 +7,6 @@ from .. import schemas, models
 from ..database import get_session
 from ..services.jira import JiraClient
 from ..services.openai import summarize_sprint
-from openai import AsyncOpenAI
-import os
 
 router = APIRouter()
 
@@ -18,7 +16,11 @@ async def get_issues_for_sprint(
     refresh: bool = False,
     session: AsyncSession = Depends(get_session),
 ):
-    # fetch sprint row
+    """
+    Get issues for a sprint. If refresh is False and cache exists, return cached issues.
+    Otherwise, fetch from Jira and update cache.
+    """
+    # Fetch sprint row from database
     res = await session.execute(select(models.Sprint).where(models.Sprint.jira_id == sprint_id))
     sprint_row = res.scalar_one_or_none()
 
@@ -38,22 +40,35 @@ async def get_issues_for_sprint(
     if not sprint_row and not refresh:
         raise HTTPException(404, "Sprint not cached; try refresh=true")
 
-    # fetch from Jira
+    # Fetch issues from Jira
     client = JiraClient()
-    raw_issues = await client.list_issues_for_sprint(sprint_id)
+    try:
+        raw_issues = await client.list_issues_for_sprint(sprint_id)
+    except Exception as e:
+        raise HTTPException(502, f"Failed to fetch issues from Jira: {e}")
 
-    # ensure sprint exists
+    # Ensure sprint exists and update name/state if possible
     if sprint_row is None:
-        sprint_row = models.Sprint(jira_id=sprint_id, name=f"Sprint {sprint_id}")
+        # Try to fetch sprint info from Jira
+        try:
+            sprints = await client.list_sprints(board_id=None)  # board_id is unknown here
+            sprint_info = next((sp for sp in sprints if sp["id"] == sprint_id), None)
+        except Exception:
+            sprint_info = None
+        sprint_row = models.Sprint(
+            jira_id=sprint_id,
+            name=sprint_info["name"] if sprint_info else f"Sprint {sprint_id}",
+            state=sprint_info.get("state", "") if sprint_info else "",
+        )
         session.add(sprint_row)
         await session.commit()
 
-    # delete old associations (not issues)
+    # Delete old associations (not issues)
     await session.execute(delete(models.SprintIssue).where(models.SprintIssue.sprint_id == sprint_row.id))
 
     for raw in raw_issues:
         f = raw["fields"]
-        # upsert Issue (by jira_key)
+        # Upsert Issue (by jira_key)
         res = await session.execute(select(models.Issue).where(models.Issue.jira_key == raw["key"]))
         issue = res.scalar_one_or_none()
         if issue is None:
@@ -65,8 +80,8 @@ async def get_issues_for_sprint(
                 parent_key=(f.get("parent") or {}).get("key"),
             )
             session.add(issue)
-            await session.flush([issue])  # ensure PK
-        # link sprint⇄issue
+            await session.flush([issue])  # Ensure PK
+        # Link sprint⇄issue
         await session.execute(
             pg_insert(models.SprintIssue)
             .values(sprint_id=sprint_row.id, issue_id=issue.id)
@@ -101,17 +116,31 @@ async def get_sprint_summary(
 
     * `force_refresh=true` pulls fresh data from Jira before summarizing.
     * Response format:
-      ```json
       {"sprint_id": 123, "summary": "…"}
-      ```
     """
-    # Получить спринт из базы
+    # Fetch sprint from database
     res = await session.execute(select(models.Sprint).where(models.Sprint.jira_id == sprint_id))
     sprint_row = res.scalar_one_or_none()
 
-    # Если summary уже есть и не требуется обновление — вернуть из базы
+    # Return cached summary if exists and refresh is not requested
     if sprint_row and sprint_row.summary_text and not force_refresh:
         return {"sprint_id": sprint_id, "summary": sprint_row.summary_text}
+
+    # If sprint does not exist, create it with info from Jira
+    if sprint_row is None:
+        client = JiraClient()
+        try:
+            sprints = await client.list_sprints(board_id=None)  # board_id is unknown here
+            sprint_info = next((sp for sp in sprints if sp["id"] == sprint_id), None)
+        except Exception:
+            sprint_info = None
+        sprint_row = models.Sprint(
+            jira_id=sprint_id,
+            name=sprint_info["name"] if sprint_info else f"Sprint {sprint_id}",
+            state=sprint_info.get("state", "") if sprint_info else "",
+        )
+        session.add(sprint_row)
+        await session.commit()
 
     # Pull sprint issues (reuse existing logic)
     sprint_data = await get_issues_for_sprint(
@@ -120,16 +149,19 @@ async def get_sprint_summary(
         session=session,
     )
 
-    summary_text = await summarize_sprint(
-        name=sprint_data.name,
-        state=sprint_data.state,
-        issues=sprint_data.issues,
-    )
+    # Generate summary via OpenAI with error handling
+    try:
+        summary_text = await summarize_sprint(
+            name=sprint_data.name,
+            state=sprint_data.state,
+            issues=sprint_data.issues,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Failed to generate summary: {e}")
 
-    # Сохранить summary в базу
-    if sprint_row:
-        sprint_row.summary_text = summary_text
-        sprint_row.summary_updated = datetime.now(timezone.utc)
-        await session.commit()
+    # Save summary to database
+    sprint_row.summary_text = summary_text
+    sprint_row.summary_updated = datetime.now(timezone.utc)
+    await session.commit()
 
     return {"sprint_id": sprint_id, "summary": summary_text}

@@ -4,10 +4,22 @@ from typing import List
 from openai import AsyncOpenAI
 import os
 
-_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Check that OpenAI API key is set
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise RuntimeError("OPENAI_API_KEY must be set in environment")
+
+_client = AsyncOpenAI(api_key=api_key)
 
 
-async def summarize_sprint(*, name: str, state: str, issues: List):
+async def summarize_sprint(
+    *,
+    name: str,
+    state: str,
+    issues: List,
+    model: str = "gpt-4o",
+    temperature: float = 0.3
+):
     """
     Generate a Russian sprint summary (main vs. secondary goals).
 
@@ -15,10 +27,15 @@ async def summarize_sprint(*, name: str, state: str, issues: List):
         name:  Sprint name.
         state: Sprint state (e.g., active, closed).
         issues: Iterable with attrs jira_key, summary, parent_key.
+        model: OpenAI model name.
+        temperature: Sampling temperature.
     Returns:
         str – summary text in Russian.
+    Raises:
+        RuntimeError if OpenAI API call fails.
     """
     def issue_line(it) -> str:
+        # Format issue line for prompt
         parent = f"(parent: {getattr(it, 'parent_key', None)})" if getattr(it, "parent_key", None) else ""
         return f"- {it.jira_key}: {it.summary} {parent}".strip()
 
@@ -37,13 +54,17 @@ async def summarize_sprint(*, name: str, state: str, issues: List):
         f"{bullet_list}"
     )
 
-    resp = await _client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg},
-        ],
-        max_tokens=1000,
-        temperature=1,
-    )
-    return resp.choices[0].message.content.strip()
+    try:
+        resp = await _client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            max_tokens=1000,
+            temperature=temperature,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        # Raise error if OpenAI API call fails
+        raise RuntimeError(f"OpenAI API error: {e}")
