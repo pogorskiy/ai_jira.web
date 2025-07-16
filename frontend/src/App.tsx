@@ -99,7 +99,7 @@ const summaryMutation = useMutation({
   };
 
   return (
-    <Container py="md">
+    <Container py="md" fluid style={{ height: '100vh', width: '100vw', maxWidth: '100vw' }}>
       <Group mb="md">
         <Select
           placeholder="Select sprint"
@@ -144,9 +144,9 @@ const summaryMutation = useMutation({
         </Button>
       </Group>
 
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" style={{ height: 'calc(100vh - 100px)' }}>
         {/* Issues table */}
-        <ScrollArea h={500}>
+        <ScrollArea h="100%" style={{ height: '100%', minHeight: 0 }}>
           {issuesData ? (
             <Table striped highlightOnHover withBorder maw={1800} mx="auto">
               <thead>
@@ -183,7 +183,7 @@ const summaryMutation = useMutation({
         </ScrollArea>
 
         {/* Summary panel */}
-        <Paper shadow="sm" p="md" withBorder>
+        <Paper shadow="sm" p="md" withBorder style={{ height: '100%' }}>
           {summaryMutation.isPending && <Loader />}
           {summaryMutation.data && (
             <Textarea
